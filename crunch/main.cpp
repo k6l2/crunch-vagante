@@ -74,6 +74,8 @@
 #include "binary.hpp"
 #include "hash.hpp"
 #include "str.hpp"
+#include <rapidjson/document.h>
+#include <filesystem>
 
 using namespace std;
 
@@ -200,14 +202,15 @@ static int GetPadding(const string& str)
 
 int main(int argc, const char* argv[])
 {
-    //Print out passed arguments
-    for (int i = 0; i < argc; ++i)
-        cout << argv[i] << ' ';
-    cout << "\n";
+///    //Print out passed arguments
+///    for (int i = 0; i < argc; ++i)
+///        cout << argv[i] << ' ';
+///    cout << "\n";
     
-    if (argc < 3)
+    if (argc < 5)
     {
-        cerr << "invalid input, expected: \"crunch [OUTPUT PREFIX] [INPUT DIRECTORY] [OPTIONS...]\"\n";
+        cerr << "invalid input, expected: \"crunch [OUTPUT PREFIX] [INPUTDIR1,INPUTDIR2,...] \
+[VAGANTE GFX META JSON FILE] [VAGANTE PALETTE JSON FILE] [OPTIONS...]\"\n";
 		cerr << "Usage notes: use Unix-style file paths, NOT windows style.\n";
 		cerr << "eg. 'C:/git/path-to-stuff' instead of 'C:\\git\\path-to-stuff'.\n";
 		cerr << "Multiple input directories can be supplied by separating them with commas.\n";
@@ -227,6 +230,48 @@ int main(int argc, const char* argv[])
         getline(ss, inputStr, ',');
         inputs.push_back(inputStr);
     }
+	//Get the gfx meta json file and parse it
+	const string gfxMetaJsonFileName = argv[3];
+	rapidjson::Document dGfxMeta;
+	{
+		std::ifstream inFileGfxMeta{ gfxMetaJsonFileName };
+		if (!inFileGfxMeta.is_open())
+		{
+			cerr << "Failed to open gfx meta JSON file '" << gfxMetaJsonFileName << "'!\n";
+			return EXIT_FAILURE;
+		}
+		std::stringstream ssFileGfxMeta;
+		ssFileGfxMeta << inFileGfxMeta.rdbuf();
+		dGfxMeta.Parse(ssFileGfxMeta.str().c_str());
+		if (dGfxMeta.HasParseError())
+		{
+			cerr << "Failed to parse gfx meta JSON file '" << gfxMetaJsonFileName << "'!\n";
+			cerr << "json error [" << dGfxMeta.GetErrorOffset() << "] =" <<
+				dGfxMeta.GetParseError();
+			return EXIT_FAILURE;
+		}
+	}
+	//Get the palette json file and parse it
+	const string palettesJsonFileName = argv[4];
+	rapidjson::Document dPalettes;
+	{
+		std::ifstream inFilePalettes{ palettesJsonFileName };
+		if (!inFilePalettes.is_open())
+		{
+			cerr << "Failed to open palettes JSON file '" << palettesJsonFileName << "'!\n";
+			return EXIT_FAILURE;
+		}
+		std::stringstream ssFilePalettes;
+		ssFilePalettes << inFilePalettes.rdbuf();
+		dPalettes.Parse(ssFilePalettes.str().c_str());
+		if (dPalettes.HasParseError())
+		{
+			cerr << "Failed to parse palettes JSON file '" << palettesJsonFileName << "'!\n";
+			cerr << "json error [" << dPalettes.GetErrorOffset() << "] =" <<
+				dPalettes.GetParseError();
+			return EXIT_FAILURE;
+		}
+	}
     
     //Get the options
     optSize = 4096;
@@ -239,7 +284,7 @@ int main(int argc, const char* argv[])
     optVerbose = false;
     optForce = false;
     optUnique = false;
-    for (int i = 3; i < argc; ++i)
+    for (int i = 5; i < argc; ++i)
     {
         string arg = argv[i];
         if (arg == "-d" || arg == "--default")
@@ -286,6 +331,8 @@ int main(int argc, const char* argv[])
 		{
 			cout << "\t" << input << "\n";
 		}
+		cout << "gfxMetaJsonFileName=" << gfxMetaJsonFileName << "\n";
+		cout << "palettesJsonFileName=" << palettesJsonFileName << "\n";
 		cout << "END SUPPLIED PARAMETER OUTPUT.\n";
 	}
     
@@ -304,7 +351,8 @@ int main(int argc, const char* argv[])
         else
             HashFile(newHash, inputs[i]);
     }
-	///TODO: hash the sprite meta file
+	HashFile(newHash, gfxMetaJsonFileName);
+	HashFile(newHash, palettesJsonFileName);
 	if (optVerbose)
 	{
 		cout << "DONE!\n";
@@ -358,6 +406,26 @@ int main(int argc, const char* argv[])
     for (size_t i = 0; i < 16; ++i)
         RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
 
+	// Process Vagante's gfx-meta.json file //
+	{
+		auto fbArray = dGfxMeta["flipbooks"].GetArray();
+		for (rapidjson::SizeType fb = 0; fb < fbArray.Size(); fb++)
+		{
+			auto const& flipbookMeta = fbArray[fb];
+			char const*const fbFileName = flipbookMeta["filename"].GetString();
+			if (optVerbose)
+			{
+				cout << "processing flipbook '" << fbFileName << "'...\n";
+			}
+		}
+	}
+	///TODO: iterate over the GFX META JSON file 
+	///	-load all the bitmaps
+	///	-make a mirrored directory structure
+	///		-not really sure how to do this~~~~~~~~
+	///	-create a new folder in the mirrored gfx directory that is the name of the flipbook
+	/// -break all the flipbooks into individual sprites
+	///	-save each frame in the mirrored directory's flipbook folder as a separate image
 	return EXIT_SUCCESS;
 
     //Load the bitmaps from all the input files and directories
