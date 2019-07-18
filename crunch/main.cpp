@@ -127,7 +127,7 @@ static string GetFileName(const string& path)
     return name;
 }
 
-static void LoadBitmap(const string& prefix, const string& path)
+static void loadBitmap(const string& prefix, const string& path)
 {
     if (optVerbose)
         cout << '\t' << path << endl;
@@ -154,7 +154,7 @@ static void LoadBitmaps(const string& root, const string& prefix)
                 LoadBitmaps(PathToStr(file.path), prefix + PathToStr(file.name) + "/");
         }
         else if (PathToStr(file.extension) == "png")
-            LoadBitmap(prefix, PathToStr(file.path));
+            loadBitmap(prefix, PathToStr(file.path));
         
         tinydir_next(&dir);
     }
@@ -289,8 +289,11 @@ int main(int argc, const char* argv[])
 		cout << "END SUPPLIED PARAMETER OUTPUT.\n";
 	}
     
-	return EXIT_SUCCESS;
     //Hash the arguments and input directories
+	if (optVerbose)
+	{
+		cout << "Hashing arguments & input directories...";
+	}
     size_t newHash = 0;
     for (int i = 1; i < argc; ++i)
         HashString(newHash, argv[i]);
@@ -301,6 +304,11 @@ int main(int argc, const char* argv[])
         else
             HashFile(newHash, inputs[i]);
     }
+	///TODO: hash the sprite meta file
+	if (optVerbose)
+	{
+		cout << "DONE!\n";
+	}
     
     //Load the old hash
     size_t oldHash;
@@ -308,7 +316,7 @@ int main(int argc, const char* argv[])
     {
         if (!optForce && newHash == oldHash)
         {
-            cout << "atlas is unchanged: " << outputPrefix << endl;
+            cout << "atlas is unchanged: " << outputPrefix << "\n";
             return EXIT_SUCCESS;
         }
     }
@@ -328,18 +336,18 @@ int main(int argc, const char* argv[])
     
     if (optVerbose)
     {
-        cout << "options..." << endl;
-        cout << "\t--xml: " << (optXml ? "true" : "false") << endl;
-        cout << "\t--binary: " << (optBinary ? "true" : "false") << endl;
-        cout << "\t--json: " << (optJson ? "true" : "false") << endl;
-        cout << "\t--premultiply: " << (optPremultiply ? "true" : "false") << endl;
-        cout << "\t--trim: " << (optTrim ? "true" : "false") << endl;
-        cout << "\t--verbose: " << (optVerbose ? "true" : "false") << endl;
-        cout << "\t--force: " << (optForce ? "true" : "false") << endl;
-        cout << "\t--unique: " << (optUnique ? "true" : "false") << endl;
-        cout << "\t--rotate: " << (optRotate ? "true" : "false") << endl;
-        cout << "\t--size: " << optSize << endl;
-        cout << "\t--pad: " << optPadding << endl;
+        cout << "options...\n";
+        cout << "\t--xml: " << (optXml ? "true" : "false") << "\n";
+        cout << "\t--binary: " << (optBinary ? "true" : "false") << "\n";
+        cout << "\t--json: " << (optJson ? "true" : "false") << "\n";
+        cout << "\t--premultiply: " << (optPremultiply ? "true" : "false") << "\n";
+        cout << "\t--trim: " << (optTrim ? "true" : "false") << "\n";
+        cout << "\t--verbose: " << (optVerbose ? "true" : "false") << "\n";
+        cout << "\t--force: " << (optForce ? "true" : "false") << "\n";
+        cout << "\t--unique: " << (optUnique ? "true" : "false") << "\n";
+        cout << "\t--rotate: " << (optRotate ? "true" : "false") << "\n";
+        cout << "\t--size: " << optSize << "\n";
+        cout << "\t--pad: " << optPadding << "\n";
     }
     
     //Remove old files
@@ -349,14 +357,16 @@ int main(int argc, const char* argv[])
     RemoveFile(outputDir + outputPrefix + ".json");
     for (size_t i = 0; i < 16; ++i)
         RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
-    
+
+	return EXIT_SUCCESS;
+
     //Load the bitmaps from all the input files and directories
     if (optVerbose)
         cout << "loading images..." << endl;
     for (size_t i = 0; i < inputs.size(); ++i)
     {
         if (inputs[i].rfind('.') != string::npos)
-            LoadBitmap("", inputs[i]);
+            loadBitmap("", inputs[i]);
         else
             LoadBitmaps(inputs[i], "");
     }
