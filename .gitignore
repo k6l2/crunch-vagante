@@ -36,3 +36,7 @@ Release/*
 *.opendb
 *.db
 *.suo
+
+Debug
+Release
+.vs
