@@ -90,8 +90,6 @@ static bool optVerbose;
 static bool optForce;
 static bool optUnique;
 static bool optRotate;
-static vector<Bitmap*> bitmaps;
-static vector<Packer*> packers;
 
 static void SplitFileName(const string& path, string* dir, string* name, string* ext)
 {
@@ -129,38 +127,34 @@ static string GetFileName(const string& path)
     return name;
 }
 
-static void loadBitmap(const string& prefix, const string& path)
+static void loadBitmap(const string& prefix, const string& path, vector<Bitmap*>& outBitmaps)
 {
     if (optVerbose)
-        cout << '\t' << path << endl;
-    
-    bitmaps.push_back(new Bitmap(path, prefix + GetFileName(path), optPremultiply, optTrim));
+        cout << "Loading bitmap: '" << path << "'...";
+	outBitmaps.push_back(new Bitmap(path, prefix + GetFileName(path), optPremultiply, optTrim));
+	if (optVerbose)
+		cout << "DONE!\n";
 }
 
-static void LoadBitmaps(const string& root, const string& prefix)
+static void LoadBitmaps(const string& root, const string& prefix, vector<Bitmap*>& outBitmaps)
 {
     static string dot1 = ".";
     static string dot2 = "..";
-    
     tinydir_dir dir;
     tinydir_open(&dir, StrToPath(root).data());
-    
     while (dir.has_next)
     {
         tinydir_file file;
         tinydir_readfile(&dir, &file);
-        
         if (file.is_dir)
         {
             if (dot1 != PathToStr(file.name) && dot2 != PathToStr(file.name))
-                LoadBitmaps(PathToStr(file.path), prefix + PathToStr(file.name) + "/");
+                LoadBitmaps(PathToStr(file.path), prefix + PathToStr(file.name) + "/", outBitmaps);
         }
         else if (PathToStr(file.extension) == "png")
-            loadBitmap(prefix, PathToStr(file.path));
-        
+            loadBitmap(prefix, PathToStr(file.path), outBitmaps);
         tinydir_next(&dir);
     }
-    
     tinydir_close(&dir);
 }
 
@@ -202,6 +196,8 @@ static int GetPadding(const string& str)
 
 int main(int argc, const char* argv[])
 {
+	vector<Bitmap*> bitmaps;
+	vector<Packer*> packers;
 ///    //Print out passed arguments
 ///    for (int i = 0; i < argc; ++i)
 ///        cout << argv[i] << ' ';
@@ -209,7 +205,7 @@ int main(int argc, const char* argv[])
     
     if (argc < 5)
     {
-        cerr << "invalid input, expected: \"crunch [OUTPUT PREFIX] [INPUTDIR1,INPUTDIR2,...] \
+        cerr << "invalid input, expected: \"crunch [OUTPUT PREFIX] [INPUT GFX DIRECTORY] \
 [VAGANTE GFX META JSON FILE] [VAGANTE PALETTE JSON FILE] [OPTIONS...]\"\n";
 		cerr << "Usage notes: use Unix-style file paths, NOT windows style.\n";
 		cerr << "eg. 'C:/git/path-to-stuff' instead of 'C:\\git\\path-to-stuff'.\n";
@@ -408,15 +404,17 @@ int main(int argc, const char* argv[])
 
 	// Process Vagante's gfx-meta.json file //
 	{
+		vector<Bitmap*> flipbookBitmaps;
 		auto fbArray = dGfxMeta["flipbooks"].GetArray();
 		for (rapidjson::SizeType fb = 0; fb < fbArray.Size(); fb++)
 		{
 			auto const& flipbookMeta = fbArray[fb];
 			char const*const fbFileName = flipbookMeta["filename"].GetString();
-			if (optVerbose)
-			{
-				cout << "processing flipbook '" << fbFileName << "'...\n";
-			}
+///			if (optVerbose)
+///			{
+///				cout << "processing flipbook '" << fbFileName << "'...\n";
+///			}
+			loadBitmap("", inputs[0] + "/" + fbFileName, flipbookBitmaps);
 		}
 	}
 	///TODO: iterate over the GFX META JSON file 
@@ -426,6 +424,8 @@ int main(int argc, const char* argv[])
 	///	-create a new folder in the mirrored gfx directory that is the name of the flipbook
 	/// -break all the flipbooks into individual sprites
 	///	-save each frame in the mirrored directory's flipbook folder as a separate image
+	/// -process masks as needed
+	///	-process palettes as needed
 	return EXIT_SUCCESS;
 
     //Load the bitmaps from all the input files and directories
@@ -434,9 +434,9 @@ int main(int argc, const char* argv[])
     for (size_t i = 0; i < inputs.size(); ++i)
     {
         if (inputs[i].rfind('.') != string::npos)
-            loadBitmap("", inputs[i]);
+            loadBitmap("", inputs[i], bitmaps);
         else
-            LoadBitmaps(inputs[i], "");
+            LoadBitmaps(inputs[i], "", bitmaps);
     }
     
     //Sort the bitmaps by area
