@@ -76,7 +76,7 @@
 #include "str.hpp"
 #include <rapidjson/document.h>
 #include <filesystem>
-
+namespace fs = std::filesystem;
 using namespace std;
 
 static int optSize;
@@ -216,7 +216,7 @@ int main(int argc, const char* argv[])
     //Get the output directory and name
     string outputDir, outputPrefix;
     SplitFileName(argv[1], &outputDir, &outputPrefix, nullptr);
-    
+
     //Get all the input files and directories
     vector<string> inputs;
     stringstream ss(argv[2]);
@@ -395,6 +395,8 @@ int main(int argc, const char* argv[])
     }
     
     //Remove old files
+	const string processedFlipbookDir = outputDir + ".processed-flipbooks";
+	///TODO: remove the entire processed flipbook directory
     RemoveFile(outputDir + outputPrefix + ".hash");
     RemoveFile(outputDir + outputPrefix + ".bin");
     RemoveFile(outputDir + outputPrefix + ".xml");
@@ -403,29 +405,34 @@ int main(int argc, const char* argv[])
         RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
 
 	// Process Vagante's gfx-meta.json file //
+	fs::create_directories(processedFlipbookDir);
+	cout << "processedFlipbookDir='" << processedFlipbookDir << "'\n";
 	{
 		vector<Bitmap*> flipbookBitmaps;
 		auto fbArray = dGfxMeta["flipbooks"].GetArray();
 		for (rapidjson::SizeType fb = 0; fb < fbArray.Size(); fb++)
 		{
 			auto const& flipbookMeta = fbArray[fb];
-			char const*const fbFileName = flipbookMeta["filename"].GetString();
+			char const*const fbFileNameAndGfxPathAndExt = flipbookMeta["filename"].GetString();
+			string fbFileDir, fbFileName;
+			SplitFileName(fbFileNameAndGfxPathAndExt, &fbFileDir, &fbFileName, nullptr);
 ///			if (optVerbose)
 ///			{
 ///				cout << "processing flipbook '" << fbFileName << "'...\n";
 ///			}
-			loadBitmap("", inputs[0] + "/" + fbFileName, flipbookBitmaps);
+			loadBitmap("", inputs[0] + "/" + fbFileNameAndGfxPathAndExt, flipbookBitmaps);
+///			cout << fbFileDir << "\n";
+///			cout << (processedFlipbookDir + "/" + fbFileDir) << "\n";
+			// Create a directory to store all the processed flipbook sprites in a temp folder //
+			fs::create_directories(processedFlipbookDir + "/" + fbFileDir + fbFileName);
 		}
 	}
 	///TODO: iterate over the GFX META JSON file 
-	///	-load all the bitmaps
-	///	-make a mirrored directory structure
-	///		-not really sure how to do this~~~~~~~~
-	///	-create a new folder in the mirrored gfx directory that is the name of the flipbook
 	/// -break all the flipbooks into individual sprites
 	///	-save each frame in the mirrored directory's flipbook folder as a separate image
 	/// -process masks as needed
 	///	-process palettes as needed
+	///TODO: erase this return, and continue to use crunch using our processed image data
 	return EXIT_SUCCESS;
 
     //Load the bitmaps from all the input files and directories
