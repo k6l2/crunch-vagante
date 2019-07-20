@@ -45,12 +45,19 @@ struct Bitmap
     uint32_t* data;
     size_t hashValue;
     Bitmap(const string& file, const string& name, bool premultiply, bool trim);
+    Bitmap(Bitmap const* bmSource, int sourceOffsetX, int sourceOffsetY, 
+		int frameWidth, int frameHeight,
+		const string& name, bool premultiply, bool trim);
     Bitmap(int width, int height);
     ~Bitmap();
     void SaveAs(const string& file);
     void CopyPixels(const Bitmap* src, int tx, int ty);
+///	void copyPixelsFromSubregion(Bitmap const* src,
+///		int sourceOffsetX, int sourceOffsetY);
     void CopyPixelsRot(const Bitmap* src, int tx, int ty);
     bool Equals(const Bitmap* other) const;
+	void postLoadProcess(string const& fileName, bool premultiply, 
+		bool trim, uint32_t* pixels, int w, int h);
 };
 
 #endif

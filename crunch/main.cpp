@@ -395,43 +395,82 @@ int main(int argc, const char* argv[])
     }
     
     //Remove old files
-	const string processedFlipbookDir = outputDir + ".processed-flipbooks";
-	///TODO: remove the entire processed flipbook directory
-    RemoveFile(outputDir + outputPrefix + ".hash");
-    RemoveFile(outputDir + outputPrefix + ".bin");
-    RemoveFile(outputDir + outputPrefix + ".xml");
-    RemoveFile(outputDir + outputPrefix + ".json");
-    for (size_t i = 0; i < 16; ++i)
-        RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
+	const string processedGfxDir = outputDir + ".processed-gfx";
+	{
+///		cout << "Recursively deleting old temp files from '" << processedGfxDir << "'...\n";
+///		const uintmax_t numProcessedGfxDeleted = 
+///			fs::remove_all(processedGfxDir);
+///		cout << "Erased " << numProcessedGfxDeleted << " old processed gfx.\n";
+		RemoveFile(outputDir + outputPrefix + ".hash");
+		RemoveFile(outputDir + outputPrefix + ".bin");
+		RemoveFile(outputDir + outputPrefix + ".xml");
+		RemoveFile(outputDir + outputPrefix + ".json");
+		for (size_t i = 0; i < 16; ++i)
+			RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
+	}
 
 	// Process Vagante's gfx-meta.json file //
-	fs::create_directories(processedFlipbookDir);
-	cout << "processedFlipbookDir='" << processedFlipbookDir << "'\n";
+///	fs::create_directories(processedGfxDir);
+///	cout << "processedGfxDir='" << processedGfxDir << "'\n";
 	{
 		vector<Bitmap*> flipbookBitmaps;
+		vector<Bitmap*> frameBitmaps;
 		auto fbArray = dGfxMeta["flipbooks"].GetArray();
 		for (rapidjson::SizeType fb = 0; fb < fbArray.Size(); fb++)
 		{
 			auto const& flipbookMeta = fbArray[fb];
-			char const*const fbFileNameAndGfxPathAndExt = flipbookMeta["filename"].GetString();
+			char const*const fbFileNameAndGfxPathAndExt = 
+										 flipbookMeta["filename"].GetString();
+			const int frameW           = flipbookMeta["frame-width"].GetInt();
+			const int frameH           = flipbookMeta["frame-height"].GetInt();
+			const int numFrames        = flipbookMeta["frame-count"].GetInt();
+			const bool generateMask    = flipbookMeta["generate-mask"].GetBool();
+			const bool generateOutline = flipbookMeta["generate-outline"].GetBool();
 			string fbFileDir, fbFileName;
 			SplitFileName(fbFileNameAndGfxPathAndExt, &fbFileDir, &fbFileName, nullptr);
 ///			if (optVerbose)
 ///			{
 ///				cout << "processing flipbook '" << fbFileName << "'...\n";
 ///			}
-			loadBitmap("", inputs[0] + "/" + fbFileNameAndGfxPathAndExt, flipbookBitmaps);
+			///loadBitmap(fbFileDir, inputs[0] + "/" + fbFileNameAndGfxPathAndExt, flipbookBitmaps);
+			const string absoluteFileName = inputs[0] + "/" + fbFileNameAndGfxPathAndExt;
+			// specifically do NOT trim the flipbook sprite sheet when we load it in here!
+			//	we will do the trim step on each individual frame instead to save maximum space.
+			flipbookBitmaps.push_back(new Bitmap(
+				absoluteFileName,
+				fbFileDir + GetFileName(absoluteFileName),
+				optPremultiply, false));
 ///			cout << fbFileDir << "\n";
 ///			cout << (processedFlipbookDir + "/" + fbFileDir) << "\n";
 			// Create a directory to store all the processed flipbook sprites in a temp folder //
-			fs::create_directories(processedFlipbookDir + "/" + fbFileDir + fbFileName);
+			//	(Actually, maybe don't do this and just store the sprites to be processed in memory?)
+			//	(I guess this would only be useful for debugging, we'll see...)
+			if (optVerbose)
+			{
+				cout << "flipbookBitmaps.back()->name=" << flipbookBitmaps.back()->name << "\n";
+			}
+			fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName);
+			const int numColumns = flipbookBitmaps.back()->width / frameW;
+			for (int f = 0; f < numFrames; f++)
+			{
+				const int frameOffsetX = (f % numColumns) * frameW;
+				const int frameOffsetY = (f / numColumns) * frameH;
+				frameBitmaps.push_back(new Bitmap(flipbookBitmaps.back(),
+					frameOffsetX, frameOffsetY, frameW, frameH,
+					fbFileDir + GetFileName(absoluteFileName),
+					// do not premultiply on the individual frames, since we already 
+					//	did that w/ the entire flipbook texture
+					false, optTrim));
+				stringstream ss;
+				ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/");
+				ss << f << ".png";
+				frameBitmaps.back()->SaveAs(ss.str());
+				///TODO: generate mask
+				///TODO: generate outline
+				///TODO: generate palette swaps
+			}
 		}
 	}
-	///TODO: iterate over the GFX META JSON file 
-	/// -break all the flipbooks into individual sprites
-	///	-save each frame in the mirrored directory's flipbook folder as a separate image
-	/// -process masks as needed
-	///	-process palettes as needed
 	///TODO: erase this return, and continue to use crunch using our processed image data
 	return EXIT_SUCCESS;
 

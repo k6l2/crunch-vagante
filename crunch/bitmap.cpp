@@ -44,105 +44,33 @@ Bitmap::Bitmap(const string& file, const string& name, bool premultiply, bool tr
         cerr << "failed to load png: " << file << endl;
         exit(EXIT_FAILURE);
     }
-    int w = static_cast<int>(pw);
-    int h = static_cast<int>(ph);
-    uint32_t* pixels = reinterpret_cast<uint32_t*>(pdata);
-    
-    //Premultiply all the pixels by their alpha
-    if (premultiply)
-    {
-        int count = w * h;
-        uint32_t c,a,r,g,b;
-        float m;
-        for (int i = 0; i < count; ++i)
-        {
-			c = pixels[i];
-			a = c >> 24;
-			m = static_cast<float>(a) / 255.0f;
-			r = static_cast<uint32_t>((c & 0xff) * m);
-			g = static_cast<uint32_t>(((c >> 8) & 0xff) * m);
-			b = static_cast<uint32_t>(((c >> 16) & 0xff) * m);
-			pixels[i] = (a << 24) | (b << 16) | (g << 8) | r;
-        }
-    }
-    
-    //TODO: skip if all corners contain opaque pixels?
-    
-    //Get pixel bounds
-    int minX = w - 1;
-    int minY = h - 1;
-    int maxX = 0;
-    int maxY = 0;
-    if (trim)
-    {
-        uint32_t p;
-        for (int y = 0; y < h; ++y)
-        {
-            for (int x = 0; x < w; ++x)
-            {
-                p = pixels[y * w + x];
-                if ((p >> 24) > 0)
-                {
-                    minX = min(x, minX);
-                    minY = min(y, minY);
-                    maxX = max(x, maxX);
-                    maxY = max(y, maxY);
-                }
-            }
-        }
-        if (maxX < minX || maxY < minY)
-        {
-            minX = 0;
-            minY = 0;
-            maxX = w - 1;
-            maxY = h - 1;
-            cout << "image is completely transparent: " << file << endl;
-        }
-    }
-    else
-    {
-        minX = 0;
-        minY = 0;
-        maxX = w - 1;
-        maxY = h - 1;
-    }
-    
-    //Calculate our trimmed size
-    width = (maxX - minX) + 1;
-    height = (maxY - minY) + 1;
-    frameW = w;
-    frameH = h;
-    
-    if (width == w && height == h)
-    {
-        //If we aren't trimmed, use the loaded image data
-        frameX = 0;
-        frameY = 0;
-        data = pixels;
-    }
-    else
-    {
-        //Create the trimmed image data
-        data = reinterpret_cast<uint32_t*>(calloc(width * height, sizeof(uint32_t)));
-        frameX = -minX;
-        frameY = -minY;
-        
-        //Copy trimmed pixels over to the trimmed pixel array
-        for (int y = minY; y <= maxY; ++y)
-            for (int x = minX; x <= maxX; ++x)
-                data[(y - minY) * width + (x - minX)] = pixels[y * w + x];
-        
-        //Free the untrimmed pixels
-        free(pixels);
-    }
-    
-    //Generate a hash for the bitmap
-    hashValue = 0;
-    HashCombine(hashValue, static_cast<size_t>(width));
-    HashCombine(hashValue, static_cast<size_t>(height));
-    HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t) * width * height);
+	int w = static_cast<int>(pw);
+	int h = static_cast<int>(ph);
+	uint32_t*const pixels = reinterpret_cast<uint32_t*>(pdata);
+	postLoadProcess(file, premultiply, trim, pixels, w, h);
 }
-
+Bitmap::Bitmap(Bitmap const* bmSource, int sourceOffsetX, int sourceOffsetY,
+	int frameWidth, int frameHeight,
+	const string& name, bool premultiply, bool trim)
+{
+	// Create a new pixel data buffer and copy the desired subregion from 
+	//	bmSource into it //
+	uint32_t*const pixels = reinterpret_cast<uint32_t*>(
+		calloc(frameWidth * frameHeight, sizeof(uint32_t)));
+	for (int y = 0; y < frameHeight; y++)
+	{
+		for (int x = 0; x < frameWidth; x++)
+		{
+			const size_t i = y * frameWidth + x;
+			const size_t iSrc =
+				(sourceOffsetY + y) * bmSource->width + (sourceOffsetX + x);
+			pixels[i] = bmSource->data[iSrc];
+		}
+	}
+	// Then, run post load processes on the new pixel data 
+	//	just like the other contructor //
+	postLoadProcess(bmSource->name, premultiply, trim, pixels, frameWidth, frameHeight);
+}
 Bitmap::Bitmap(int width, int height)
 : width(width), height(height)
 {
@@ -172,7 +100,20 @@ void Bitmap::CopyPixels(const Bitmap* src, int tx, int ty)
         for (int x = 0; x < src->width; ++x)
             data[(ty + y) * width + (tx + x)] = src->data[y * src->width + x];
 }
-
+///void Bitmap::copyPixelsFromSubregion(Bitmap const* src,
+///	int sourceOffsetX, int sourceOffsetY)
+///{
+///	for (int y = 0; y < height; y++)
+///	{
+///		for (int x = 0; x < width; x++)
+///		{
+///			const size_t i = y * width + x;
+///			const size_t iSrc = 
+///				(sourceOffsetY + y) * src->width + (sourceOffsetX + x);
+///			data[i] = src->data[iSrc];
+///		}
+///	}
+///}
 void Bitmap::CopyPixelsRot(const Bitmap* src, int tx, int ty)
 {
     int r = src->height - 1;
@@ -186,4 +127,101 @@ bool Bitmap::Equals(const Bitmap* other) const
     if (width == other->width && height == other->height)
         return memcmp(data, other->data, sizeof(uint32_t) * width * height) == 0;
     return false;
+}
+void Bitmap::postLoadProcess(string const& fileName, bool premultiply, 
+	bool trim, uint32_t* pixels, int w, int h)
+{
+	//Premultiply all the pixels by their alpha
+	if (premultiply)
+	{
+		int count = w * h;
+		uint32_t c, a, r, g, b;
+		float m;
+		for (int i = 0; i < count; ++i)
+		{
+			c = pixels[i];
+			a = c >> 24;
+			m = static_cast<float>(a) / 255.0f;
+			r = static_cast<uint32_t>((c & 0xff) * m);
+			g = static_cast<uint32_t>(((c >> 8) & 0xff) * m);
+			b = static_cast<uint32_t>(((c >> 16) & 0xff) * m);
+			pixels[i] = (a << 24) | (b << 16) | (g << 8) | r;
+		}
+	}
+
+	//TODO: skip if all corners contain opaque pixels?
+
+	//Get pixel bounds
+	int minX = w - 1;
+	int minY = h - 1;
+	int maxX = 0;
+	int maxY = 0;
+	if (trim)
+	{
+		uint32_t p;
+		for (int y = 0; y < h; ++y)
+		{
+			for (int x = 0; x < w; ++x)
+			{
+				p = pixels[y * w + x];
+				if ((p >> 24) > 0)
+				{
+					minX = min(x, minX);
+					minY = min(y, minY);
+					maxX = max(x, maxX);
+					maxY = max(y, maxY);
+				}
+			}
+		}
+		if (maxX < minX || maxY < minY)
+		{
+			minX = 0;
+			minY = 0;
+			maxX = w - 1;
+			maxY = h - 1;
+			cout << "image is completely transparent: " << fileName << endl;
+		}
+	}
+	else
+	{
+		minX = 0;
+		minY = 0;
+		maxX = w - 1;
+		maxY = h - 1;
+	}
+
+	//Calculate our trimmed size
+	width = (maxX - minX) + 1;
+	height = (maxY - minY) + 1;
+	frameW = w;
+	frameH = h;
+
+	if (width == w && height == h)
+	{
+		//If we aren't trimmed, use the loaded image data
+		frameX = 0;
+		frameY = 0;
+		data = pixels;
+	}
+	else
+	{
+		//Create the trimmed image data
+		data = reinterpret_cast<uint32_t*>(calloc(width * height, sizeof(uint32_t)));
+		frameX = -minX;
+		frameY = -minY;
+
+		//Copy trimmed pixels over to the trimmed pixel array
+		for (int y = minY; y <= maxY; ++y)
+			for (int x = minX; x <= maxX; ++x)
+				data[(y - minY) * width + (x - minX)] = pixels[y * w + x];
+
+		//Free the untrimmed pixels
+		free(pixels);
+	}
+
+	//Generate a hash for the bitmap
+	hashValue = 0;
+	HashCombine(hashValue, static_cast<size_t>(width));
+	HashCombine(hashValue, static_cast<size_t>(height));
+	HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t) * width * height);
 }
