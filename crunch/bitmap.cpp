@@ -32,7 +32,20 @@
 #include "hash.hpp"
 
 using namespace std;
-
+Bitmap::Bitmap(Bitmap const& other)
+	:name(other.name)
+	,width(other.width)
+	,height(other.height)
+	,frameX(other.frameX)
+	,frameY(other.frameY)
+	,frameW(other.frameW)
+	,frameH(other.frameH)
+	,hashValue(other.hashValue)
+{
+	data = reinterpret_cast<uint32_t*>(
+		calloc(width * height, sizeof(uint32_t)));
+	CopyPixels(&other, 0, 0);
+}
 Bitmap::Bitmap(const string& file, const string& name, bool premultiply, bool trim)
 : name(name)
 {
@@ -53,6 +66,7 @@ Bitmap::Bitmap(Bitmap const* bmSource, int sourceOffsetX, int sourceOffsetY,
 	int frameWidth, int frameHeight,
 	const string& name, bool premultiply, bool trim)
 {
+	this->name = name;
 	// Create a new pixel data buffer and copy the desired subregion from 
 	//	bmSource into it //
 	uint32_t*const pixels = reinterpret_cast<uint32_t*>(
@@ -224,4 +238,50 @@ void Bitmap::postLoadProcess(string const& fileName, bool premultiply,
 	HashCombine(hashValue, static_cast<size_t>(width));
 	HashCombine(hashValue, static_cast<size_t>(height));
 	HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t) * width * height);
+}
+void Bitmap::maskPixels(string const& newFileName)
+{
+	name = newFileName;
+	const int numPixels = width * height;
+	uint32_t p, a;
+	for (int i = 0; i < numPixels; i++)
+	{
+		p = data[i];
+		a = p >> 24;
+		if (a == 0)
+		{
+			continue;
+		}
+		data[i] = 0xFFFFFFFF;
+	}
+	// re-hash this new bitmap //
+	hashValue = 0;
+	HashCombine(hashValue, static_cast<size_t>(width));
+	HashCombine(hashValue, static_cast<size_t>(height));
+	HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t)* width* height);
+}
+void Bitmap::outlinePixels(string const& newFileName)
+{
+	name = newFileName;
+	const int numPixels = width * height;
+	uint32_t p, a, b, g, r;
+	for (int i = 0; i < numPixels; i++)
+	{
+		p = data[i];
+		a = p >> 24;
+		b = (p >> 16) & 0xFF;
+		g = (p >> 8 ) & 0xFF;
+		r = p & 0xFF;
+		if (a == 0 || r != 0 || g != 0 || b != 0)
+		{
+			data[i] = 0;
+			continue;
+		}
+		data[i] = 0xFFFFFFFF;
+	}
+	// re-hash this new bitmap //
+	hashValue = 0;
+	HashCombine(hashValue, static_cast<size_t>(width));
+	HashCombine(hashValue, static_cast<size_t>(height));
+	HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t)* width* height);
 }

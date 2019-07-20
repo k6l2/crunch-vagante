@@ -44,6 +44,7 @@ struct Bitmap
     int frameH;
     uint32_t* data;
     size_t hashValue;
+	Bitmap(Bitmap const& other);
     Bitmap(const string& file, const string& name, bool premultiply, bool trim);
     Bitmap(Bitmap const* bmSource, int sourceOffsetX, int sourceOffsetY, 
 		int frameWidth, int frameHeight,
@@ -58,6 +59,8 @@ struct Bitmap
     bool Equals(const Bitmap* other) const;
 	void postLoadProcess(string const& fileName, bool premultiply, 
 		bool trim, uint32_t* pixels, int w, int h);
+	void maskPixels(string const& newFileName);
+	void outlinePixels(string const& newFileName);
 };
 
 #endif

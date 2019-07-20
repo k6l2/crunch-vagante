@@ -396,6 +396,7 @@ int main(int argc, const char* argv[])
     
     //Remove old files
 	const string processedGfxDir = outputDir + ".processed-gfx";
+	const bool debugProcessedGfx = true;
 	{
 ///		cout << "Recursively deleting old temp files from '" << processedGfxDir << "'...\n";
 ///		const uintmax_t numProcessedGfxDeleted = 
@@ -447,43 +448,88 @@ int main(int argc, const char* argv[])
 			//	(I guess this would only be useful for debugging, we'll see...)
 			if (optVerbose)
 			{
-				cout << "flipbookBitmaps.back()->name=" << flipbookBitmaps.back()->name << "\n";
+				cout << "new flipbook name=" << flipbookBitmaps.back()->name << "\n";
 			}
-			fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName);
+			if (debugProcessedGfx)
+			{
+				fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName);
+				if (generateMask)
+				{
+					fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/mask");
+				}
+				if (generateOutline)
+				{
+					fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/outline");
+				}
+			}
 			const int numColumns = flipbookBitmaps.back()->width / frameW;
 			for (int f = 0; f < numFrames; f++)
 			{
 				const int frameOffsetX = (f % numColumns) * frameW;
 				const int frameOffsetY = (f / numColumns) * frameH;
+				stringstream ssFrameName;
+				ssFrameName << fbFileDir << fbFileName << "/" << f;
+				if (optVerbose)
+				{
+					cout << "\t" << ssFrameName.str()<<"\n";
+				}
 				frameBitmaps.push_back(new Bitmap(flipbookBitmaps.back(),
 					frameOffsetX, frameOffsetY, frameW, frameH,
-					fbFileDir + GetFileName(absoluteFileName),
+					ssFrameName.str(),
 					// do not premultiply on the individual frames, since we already 
 					//	did that w/ the entire flipbook texture
 					false, optTrim));
-				stringstream ss;
-				ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/");
-				ss << f << ".png";
-				frameBitmaps.back()->SaveAs(ss.str());
-				///TODO: generate mask
-				///TODO: generate outline
+				bitmaps.push_back(new Bitmap(*frameBitmaps.back()));
+				if (debugProcessedGfx)
+				{
+					stringstream ss;
+					ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/");
+					ss << f << ".png";
+					frameBitmaps.back()->SaveAs(ss.str());
+				}
+				if (generateMask)
+				{
+					bitmaps.push_back(new Bitmap(*frameBitmaps.back()));
+					stringstream ssFrameName;
+					ssFrameName << fbFileDir << fbFileName << "/mask/" << f;
+					bitmaps.back()->maskPixels(ssFrameName.str());
+					if (debugProcessedGfx)
+					{
+						stringstream ss;
+						ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/mask/");
+						ss << f << ".png";
+						bitmaps.back()->SaveAs(ss.str());
+					}
+				}
+				if (generateOutline)
+				{
+					bitmaps.push_back(new Bitmap(*frameBitmaps.back()));
+					stringstream ssFrameName;
+					ssFrameName << fbFileDir << fbFileName << "/outline/" << f;
+					bitmaps.back()->outlinePixels(ssFrameName.str());
+					if (debugProcessedGfx)
+					{
+						stringstream ss;
+						ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/outline/");
+						ss << f << ".png";
+						bitmaps.back()->SaveAs(ss.str());
+					}
+				}
 				///TODO: generate palette swaps
 			}
 		}
 	}
-	///TODO: erase this return, and continue to use crunch using our processed image data
-	return EXIT_SUCCESS;
 
-    //Load the bitmaps from all the input files and directories
-    if (optVerbose)
-        cout << "loading images..." << endl;
-    for (size_t i = 0; i < inputs.size(); ++i)
-    {
-        if (inputs[i].rfind('.') != string::npos)
-            loadBitmap("", inputs[i], bitmaps);
-        else
-            LoadBitmaps(inputs[i], "", bitmaps);
-    }
+///    //Load the bitmaps from all the input files and directories
+///    if (optVerbose)
+///        cout << "loading images..." << endl;
+///    for (size_t i = 0; i < inputs.size(); ++i)
+///    {
+///        if (inputs[i].rfind('.') != string::npos)
+///            loadBitmap("", inputs[i], bitmaps);
+///        else
+///            LoadBitmaps(inputs[i], "", bitmaps);
+///    }
     
     //Sort the bitmaps by area
     sort(bitmaps.begin(), bitmaps.end(), [](const Bitmap* a, const Bitmap* b) {
