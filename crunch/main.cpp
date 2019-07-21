@@ -281,7 +281,7 @@ int main(int argc, const char* argv[])
     
     //Get the options
     optSize = 4096;
-    optPadding = 1;
+    optPadding = 2;
     optXml = false;
     optBinary = false;
     optJson = false;
@@ -406,7 +406,7 @@ int main(int argc, const char* argv[])
     
     //Remove old files
 	const string processedGfxDir = outputDir + ".processed-gfx";
-	const bool debugProcessedGfx = true;
+	const bool debugProcessedGfx = false;
 	{
 ///		cout << "Recursively deleting old temp files from '" << processedGfxDir << "'...\n";
 ///		const uintmax_t numProcessedGfxDeleted = 
@@ -487,7 +487,7 @@ int main(int argc, const char* argv[])
 										 flipbookMeta["filename"].GetString();
 			const int frameW           = flipbookMeta["frame-width"].GetInt();
 			const int frameH           = flipbookMeta["frame-height"].GetInt();
-			const int numFrames        = flipbookMeta["frame-count"].GetInt();
+			const int frameCount       = flipbookMeta["frame-count"].GetInt();
 			const bool generateMask    = flipbookMeta["generate-mask"].GetBool();
 			const bool generateOutline = flipbookMeta["generate-outline"].GetBool();
 			string fbFileDir, fbFileName;
@@ -504,6 +504,9 @@ int main(int argc, const char* argv[])
 				absoluteFileName,
 				fbFileDir + GetFileName(absoluteFileName),
 				optPremultiply, false));
+			const int numFrames = (frameCount > 0 ? frameCount :  
+				((flipbookBitmaps.back()->width  / frameW) * 
+				 (flipbookBitmaps.back()->height / frameH)));
 ///			cout << fbFileDir << "\n";
 ///			cout << (processedFlipbookDir + "/" + fbFileDir) << "\n";
 			// Create a directory to store all the processed flipbook sprites in a temp folder //
@@ -625,7 +628,6 @@ int main(int argc, const char* argv[])
 						}
 					}
 				}
-				///TODO: generate palette swaps
 			}
 		}
 	}
@@ -652,6 +654,8 @@ int main(int argc, const char* argv[])
         if (optVerbose)
             cout << "packing " << bitmaps.size() << " images..." << endl;
         auto packer = new Packer(optSize, optSize, optPadding);
+		/// TODO: figure out how to put padding/2 pad around the outside edge of all the bitmaps so
+		///		that we can fix texture bleeding for sprites on the outside edge
 		/// TODO: figure out how to do a post-processing step to put duplicate pixel data inside the
 		///		padding area to prevent texture bleeding!
         packer->Pack(bitmaps, optVerbose, optUnique, optRotate);
