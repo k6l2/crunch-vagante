@@ -193,11 +193,21 @@ static int GetPadding(const string& str)
     exit(EXIT_FAILURE);
     return 1;
 }
-
+struct Palette
+{
+	string name;
+	vector<uint32_t> colors;
+};
+struct PaletteGroup
+{
+	vector<string> textureNames;
+	vector<Palette> palettes;
+};
 int main(int argc, const char* argv[])
 {
 	vector<Bitmap*> bitmaps;
 	vector<Packer*> packers;
+	vector<PaletteGroup> paletteGroups;
 ///    //Print out passed arguments
 ///    for (int i = 0; i < argc; ++i)
 ///        cout << argv[i] << ' ';
@@ -409,7 +419,60 @@ int main(int argc, const char* argv[])
 		for (size_t i = 0; i < 16; ++i)
 			RemoveFile(outputDir + outputPrefix + to_string(i) + ".png");
 	}
-
+	// Load the palettes.json file contents into memory //
+	if (optVerbose)
+	{
+		cout << "Deserializing palettes JSON file...\n";
+	}
+	{
+		auto pGArray = dPalettes["palette-groups"].GetArray();
+		for (rapidjson::SizeType pg = 0; pg < pGArray.Size(); pg++)
+		{
+			auto const& palGroup = pGArray[pg];
+			PaletteGroup newPg;
+			const string newPgName = palGroup["name"].GetString();
+			if (optVerbose)
+			{
+				cout << "\tPaletteGroup name="<< newPgName<<"\n";
+			}
+			auto texNameArray = palGroup["texture-names"].GetArray();
+			for (rapidjson::SizeType t = 0; t < texNameArray.Size(); t++)
+			{
+				char const*const texName = texNameArray[t].GetString();
+				newPg.textureNames.emplace_back(texName);
+			}
+			auto pArray = palGroup["palettes"].GetArray();
+			for (rapidjson::SizeType p = 0; p < pArray.Size(); p++)
+			{
+				auto const& jsonPalette = pArray[p];
+				Palette newP;
+				newP.name = jsonPalette["name"].GetString();
+				if (optVerbose)
+				{
+					cout << "\t\tPalette name=" << newP.name << "\n";
+				}
+				auto colorArray = jsonPalette["colors"].GetArray();
+				for (rapidjson::SizeType c = 0; c < colorArray.Size(); c++)
+				{
+					auto colorComponentArray = colorArray[c].GetArray();
+					assert(colorComponentArray.Size() == 4);
+					const uint32_t red   = colorComponentArray[0].GetInt();
+					const uint32_t green = colorComponentArray[1].GetInt();
+					const uint32_t blue  = colorComponentArray[2].GetInt();
+					// Just ignore the alpha component because it is meaningless //
+					///const uint32_t alpha = colorComponentArray[3].GetInt();
+					const uint32_t colorData = 
+						///(alpha << 24) |
+						(blue  << 16) |
+						(green << 8 ) |
+						 red;
+					newP.colors.push_back(colorData);
+				}
+				newPg.palettes.push_back(newP);
+			}
+			paletteGroups.push_back(newPg);
+		}
+	}
 	// Process Vagante's gfx-meta.json file //
 ///	fs::create_directories(processedGfxDir);
 ///	cout << "processedGfxDir='" << processedGfxDir << "'\n";
@@ -448,7 +511,8 @@ int main(int argc, const char* argv[])
 			//	(I guess this would only be useful for debugging, we'll see...)
 			if (optVerbose)
 			{
-				cout << "new flipbook name=" << flipbookBitmaps.back()->name << "\n";
+				cout << "new flipbook fileName=" << fbFileNameAndGfxPathAndExt << "\n";
+				///cout << "new flipbook name=" << flipbookBitmaps.back()->name << "\n";
 			}
 			if (debugProcessedGfx)
 			{
@@ -460,6 +524,27 @@ int main(int argc, const char* argv[])
 				if (generateOutline)
 				{
 					fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/outline");
+				}
+			}
+			// iterate over paletteGroups, iterate over each PaletteGroup's textureNames,
+			//	if it contains fbFileNameAndGfxPathAndExt in this PaletteGroup, that means we need
+			//	to also generate palette swaps for each frame in the loop below!
+			// @assumtion
+			//	for any given texture file, it is only located in ONE palette group!
+			PaletteGroup const* flipbookPaletteGroup = nullptr;
+			for (auto const& pg : paletteGroups)
+			{
+				for (string const& texName : pg.textureNames)
+				{
+					if (fbFileNameAndGfxPathAndExt == texName)
+					{
+						flipbookPaletteGroup = &pg;
+						break;
+					}
+				}
+				if (flipbookPaletteGroup)
+				{
+					break;
 				}
 			}
 			const int numColumns = flipbookBitmaps.back()->width / frameW;
@@ -515,6 +600,31 @@ int main(int argc, const char* argv[])
 						bitmaps.back()->SaveAs(ss.str());
 					}
 				}
+				if (flipbookPaletteGroup)
+				{
+					// @assumption
+					//	first palette in a palette group is always the default palette
+					Palette const& defaultPalette = flipbookPaletteGroup->palettes[0];
+					for (size_t p = 1; p < flipbookPaletteGroup->palettes.size(); p++)
+					{
+						Palette const& palette = flipbookPaletteGroup->palettes[p];
+						bitmaps.push_back(new Bitmap(*frameBitmaps.back()));
+						stringstream ssFrameName;
+						ssFrameName << fbFileDir << fbFileName << "/"<<
+							palette.name <<"/"<< f;
+						bitmaps.back()->swapPalette(ssFrameName.str(),
+							defaultPalette.colors, palette.colors);
+						if (debugProcessedGfx)
+						{
+							fs::create_directories(processedGfxDir + "/flipbooks/" + 
+								fbFileDir + fbFileName + "/"+ palette.name);
+							stringstream ss;
+							ss << (processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName + "/");
+							ss << palette.name << "/" << f << ".png";
+							bitmaps.back()->SaveAs(ss.str());
+						}
+					}
+				}
 				///TODO: generate palette swaps
 			}
 		}
@@ -542,6 +652,8 @@ int main(int argc, const char* argv[])
         if (optVerbose)
             cout << "packing " << bitmaps.size() << " images..." << endl;
         auto packer = new Packer(optSize, optSize, optPadding);
+		/// TODO: figure out how to do a post-processing step to put duplicate pixel data inside the
+		///		padding area to prevent texture bleeding!
         packer->Pack(bitmaps, optVerbose, optUnique, optRotate);
         packers.push_back(packer);
         if (optVerbose)

@@ -30,7 +30,7 @@
 #include "lodepng.h"
 #include <algorithm>
 #include "hash.hpp"
-
+#include <assert.h>
 using namespace std;
 Bitmap::Bitmap(Bitmap const& other)
 	:name(other.name)
@@ -278,6 +278,47 @@ void Bitmap::outlinePixels(string const& newFileName)
 			continue;
 		}
 		data[i] = 0xFFFFFFFF;
+	}
+	// re-hash this new bitmap //
+	hashValue = 0;
+	HashCombine(hashValue, static_cast<size_t>(width));
+	HashCombine(hashValue, static_cast<size_t>(height));
+	HashData(hashValue, reinterpret_cast<char*>(data), sizeof(uint32_t)* width* height);
+}
+void Bitmap::swapPalette(string const& newFileName,
+	vector<uint32_t> const& defaultPalette,
+	vector<uint32_t> const& newPalette)
+{
+	assert(defaultPalette.size() == newPalette.size());
+	name = newFileName;
+	const int numPixels = width * height;
+	uint32_t p, a;
+	auto findColorIndex = [](uint32_t color,
+		vector<uint32_t> const& palette)->size_t
+	{
+		// strip the alpha channel from the color because with respect to palettes,
+		//	it doesn't matter.  All palette color data has zeroed out alpha channels //
+		color &= 0x00FFFFFF;
+		for (size_t c = 0; c < palette.size(); c++)
+		{
+			if (palette[c] == color)
+			{
+				return c;
+			}
+		}
+		return palette.size();
+	};
+	for (int i = 0; i < numPixels; i++)
+	{
+		p = data[i];
+		a = p >> 24;
+		if (a == 0)
+		{
+			continue;
+		}
+		const size_t defaultPaletteIndex = findColorIndex(p, defaultPalette);
+		assert(defaultPaletteIndex < defaultPalette.size());
+		data[i] = (a << 24) | newPalette[defaultPaletteIndex];
 	}
 	// re-hash this new bitmap //
 	hashValue = 0;

@@ -61,6 +61,9 @@ struct Bitmap
 		bool trim, uint32_t* pixels, int w, int h);
 	void maskPixels(string const& newFileName);
 	void outlinePixels(string const& newFileName);
+	void swapPalette(string const& newFileName,
+		vector<uint32_t> const& defaultPalette,
+		vector<uint32_t> const& newPalette);
 };
 
 #endif
