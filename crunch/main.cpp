@@ -479,17 +479,76 @@ int main(int argc, const char* argv[])
 	{
 		vector<Bitmap*> flipbookBitmaps;
 		vector<Bitmap*> frameBitmaps;
-		auto fbArray = dGfxMeta["flipbooks"].GetArray();
-		for (rapidjson::SizeType fb = 0; fb < fbArray.Size(); fb++)
+		struct FlipbookMeta
 		{
-			auto const& flipbookMeta = fbArray[fb];
+			string fileNameAndGfxPathAndExt;
+			int frameWidth;
+			int frameHeight;
+			int frameCount;
+			bool generateMask;
+			bool generateOutline;
+		};
+		vector<FlipbookMeta> flipbookMetaArray;
+		const int numPlayerCostumes = dGfxMeta["num-player-costumes"].GetInt();
+		auto playerClassDirArray = dGfxMeta["player-class-directories"].GetArray();
+		auto petClassDirArray    = dGfxMeta["pet-class-directories"].GetArray();
+		auto pcFbArray       = dGfxMeta["player-class-flipbooks"].GetArray();
+		auto petFbArray      = dGfxMeta["pet-class-flipbooks"].GetArray();
+		auto skeletonFbArray = dGfxMeta["skeleton-class-flipbooks"].GetArray();
+		auto fbArray         = dGfxMeta["flipbooks"].GetArray();
+		auto gatherFlipbookMeta = [&flipbookMetaArray](string const& fileNamePrefix,
+			rapidjson::GenericArray<false, rapidjson::Value::ValueType> const& jsonArray)->void
+		{
+			for (rapidjson::SizeType fb = 0; fb < jsonArray.Size(); fb++)
+			{
+				auto const& flipbookMeta = jsonArray[fb];
+				FlipbookMeta newMeta;
+				newMeta.fileNameAndGfxPathAndExt = 
+					fileNamePrefix + flipbookMeta["filename"].GetString();
+				newMeta.frameWidth               = flipbookMeta["frame-width"].GetInt();
+				newMeta.frameHeight              = flipbookMeta["frame-height"].GetInt();
+				newMeta.frameCount               = flipbookMeta["frame-count"].GetInt();
+				newMeta.generateMask             = flipbookMeta["generate-mask"].GetBool();
+				newMeta.generateOutline          = flipbookMeta["generate-outline"].GetBool();
+				if (optVerbose)
+				{
+					cout << "new flipbook fileName=" << newMeta.fileNameAndGfxPathAndExt << "\n";
+					///cout << "new flipbook name=" << flipbookBitmaps.back()->name << "\n";
+				}
+				flipbookMetaArray.push_back(newMeta);
+			}
+		};
+		for (int playerCostumeIndex = 1; playerCostumeIndex <= numPlayerCostumes; playerCostumeIndex++)
+		{
+			for (rapidjson::SizeType d = 0; d < playerClassDirArray.Size(); d++)
+			{
+				char const*const classDir = playerClassDirArray[d].GetString();
+				stringstream ssDir;
+				ssDir << classDir << playerCostumeIndex << "/";
+				gatherFlipbookMeta(ssDir.str(), pcFbArray);
+				if (ssDir.str().find("skeleton") != string::npos)
+				{
+					gatherFlipbookMeta(ssDir.str(), skeletonFbArray);
+				}
+			}
+			for (rapidjson::SizeType d = 0; d < petClassDirArray.Size(); d++)
+			{
+				char const*const classDir = petClassDirArray[d].GetString();
+				stringstream ssDir;
+				ssDir << classDir << playerCostumeIndex << "/";
+				gatherFlipbookMeta(ssDir.str(), petFbArray);
+			}
+		}
+		gatherFlipbookMeta("", fbArray);
+		for(FlipbookMeta const& fbMeta : flipbookMetaArray)
+		{
 			char const*const fbFileNameAndGfxPathAndExt = 
-										 flipbookMeta["filename"].GetString();
-			int frameW                 = flipbookMeta["frame-width"].GetInt();
-			int frameH                 = flipbookMeta["frame-height"].GetInt();
-			int frameCount             = flipbookMeta["frame-count"].GetInt();
-			const bool generateMask    = flipbookMeta["generate-mask"].GetBool();
-			const bool generateOutline = flipbookMeta["generate-outline"].GetBool();
+				fbMeta.fileNameAndGfxPathAndExt.c_str();
+			int frameW                 = fbMeta.frameWidth;
+			int frameH                 = fbMeta.frameHeight;
+			int frameCount             = fbMeta.frameCount;
+			const bool generateMask    = fbMeta.generateMask;
+			const bool generateOutline = fbMeta.generateOutline;
 			string fbFileDir, fbFileName;
 			SplitFileName(fbFileNameAndGfxPathAndExt, &fbFileDir, &fbFileName, nullptr);
 ///			if (optVerbose)
@@ -511,7 +570,9 @@ int main(int argc, const char* argv[])
 				if (frameW != 0 || frameH != 0)
 				{
 					cerr << "ERROR: frame-width & frame-height must BOTH be equal to zero if either "
-						<< "one is zero to signify a single-frame flipbook!\n";
+						<< "one is zero to signify a degenerate case single-frame flipbook!\n";
+					cerr << "Offending flipbook=" << fbFileNameAndGfxPathAndExt << "\n";
+					exit(EXIT_FAILURE);
 				}
 				frameW = flipbookBitmaps.back()->width;
 				frameH = flipbookBitmaps.back()->height;
@@ -525,11 +586,6 @@ int main(int argc, const char* argv[])
 			// Create a directory to store all the processed flipbook sprites in a temp folder //
 			//	(Actually, maybe don't do this and just store the sprites to be processed in memory?)
 			//	(I guess this would only be useful for debugging, we'll see...)
-			if (optVerbose)
-			{
-				cout << "new flipbook fileName=" << fbFileNameAndGfxPathAndExt << "\n";
-				///cout << "new flipbook name=" << flipbookBitmaps.back()->name << "\n";
-			}
 			if (debugProcessedGfx)
 			{
 				fs::create_directories(processedGfxDir + "/flipbooks/" + fbFileDir + fbFileName);
