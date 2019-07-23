@@ -485,9 +485,9 @@ int main(int argc, const char* argv[])
 			auto const& flipbookMeta = fbArray[fb];
 			char const*const fbFileNameAndGfxPathAndExt = 
 										 flipbookMeta["filename"].GetString();
-			const int frameW           = flipbookMeta["frame-width"].GetInt();
-			const int frameH           = flipbookMeta["frame-height"].GetInt();
-			const int frameCount       = flipbookMeta["frame-count"].GetInt();
+			int frameW                 = flipbookMeta["frame-width"].GetInt();
+			int frameH                 = flipbookMeta["frame-height"].GetInt();
+			int frameCount             = flipbookMeta["frame-count"].GetInt();
 			const bool generateMask    = flipbookMeta["generate-mask"].GetBool();
 			const bool generateOutline = flipbookMeta["generate-outline"].GetBool();
 			string fbFileDir, fbFileName;
@@ -504,6 +504,19 @@ int main(int argc, const char* argv[])
 				absoluteFileName,
 				fbFileDir + GetFileName(absoluteFileName),
 				optPremultiply, false));
+			// if the database has w == h == 0, that means the entire flipbook should just be treated
+			//	as a single frame.
+			if (frameW == 0 || frameH == 0)
+			{
+				if (frameW != 0 || frameH != 0)
+				{
+					cerr << "ERROR: frame-width & frame-height must BOTH be equal to zero if either "
+						<< "one is zero to signify a single-frame flipbook!\n";
+				}
+				frameW = flipbookBitmaps.back()->width;
+				frameH = flipbookBitmaps.back()->height;
+				frameCount = 0;
+			}
 			const int numFrames = (frameCount > 0 ? frameCount :  
 				((flipbookBitmaps.back()->width  / frameW) * 
 				 (flipbookBitmaps.back()->height / frameH)));
