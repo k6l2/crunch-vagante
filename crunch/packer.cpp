@@ -42,7 +42,10 @@ Packer::Packer(int width, int height, int pad)
 
 void Packer::Pack(vector<Bitmap*>& bitmaps, bool verbose, bool unique, bool rotate)
 {
-    MaxRectsBinPack packer(width, height);
+	//	@anti-texture-bleeding
+	// subtract "pad" from the packer range, so that we can have pixels around the outside edge of the
+	//	texture's contents that can be filled with anti-texture-bleeding data if desired~
+    MaxRectsBinPack packer(width - pad, height - pad);
     
     int ww = 0;
     int hh = 0;
@@ -70,8 +73,13 @@ void Packer::Pack(vector<Bitmap*>& bitmaps, bool verbose, bool unique, bool rota
         
         //If it's not a duplicate, pack it into the atlas
         {
-            Rect rect = packer.Insert(bitmap->width + pad, bitmap->height + pad, rotate, MaxRectsBinPack::RectBestShortSideFit);
-            
+            Rect rect = packer.Insert(bitmap->width + pad, bitmap->height + pad, 
+				rotate, MaxRectsBinPack::RectBestShortSideFit);
+			//	@anti-texture-bleeding
+			// offset the resulting rect by half of the pad size so that the left & top edges
+			//	of the atlas texture are padded with empty pixels.
+			rect.x += pad / 2;
+			rect.y += pad / 2;
             if (rect.width == 0 || rect.height == 0)
                 break;
             
