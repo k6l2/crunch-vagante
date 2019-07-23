@@ -723,8 +723,6 @@ int main(int argc, const char* argv[])
         if (optVerbose)
             cout << "packing " << bitmaps.size() << " images..." << endl;
         auto packer = new Packer(optSize, optSize, optPadding);
-		/// TODO: figure out how to do a post-processing step to put duplicate pixel data inside the
-		///		padding area to prevent texture bleeding!
         packer->Pack(bitmaps, optVerbose, optUnique, optRotate);
         packers.push_back(packer);
         if (optVerbose)

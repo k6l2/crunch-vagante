@@ -44,7 +44,7 @@ Bitmap::Bitmap(Bitmap const& other)
 {
 	data = reinterpret_cast<uint32_t*>(
 		calloc(width * height, sizeof(uint32_t)));
-	CopyPixels(&other, 0, 0);
+	CopyPixels(&other, 0, 0, 0);
 }
 Bitmap::Bitmap(const string& file, const string& name, bool premultiply, bool trim)
 : name(name)
@@ -108,32 +108,30 @@ void Bitmap::SaveAs(const string& file)
     }
 }
 
-void Bitmap::CopyPixels(const Bitmap* src, int tx, int ty)
+void Bitmap::CopyPixels(const Bitmap* src, int tx, int ty, int edgePadSize)
 {
-    for (int y = 0; y < src->height; ++y)
-        for (int x = 0; x < src->width; ++x)
-            data[(ty + y) * width + (tx + x)] = src->data[y * src->width + x];
+	for (int y = -edgePadSize; y < src->height + edgePadSize; ++y)
+	{
+		for (int x = -edgePadSize; x < src->width + edgePadSize; ++x)
+		{
+			const int srcX = std::clamp(x, 0, src->width  - 1);
+			const int srcY = std::clamp(y, 0, src->height - 1);
+            data[(ty + y) * width + (tx + x)] = src->data[srcY * src->width + srcX];
+		}
+	}
 }
-///void Bitmap::copyPixelsFromSubregion(Bitmap const* src,
-///	int sourceOffsetX, int sourceOffsetY)
-///{
-///	for (int y = 0; y < height; y++)
-///	{
-///		for (int x = 0; x < width; x++)
-///		{
-///			const size_t i = y * width + x;
-///			const size_t iSrc = 
-///				(sourceOffsetY + y) * src->width + (sourceOffsetX + x);
-///			data[i] = src->data[iSrc];
-///		}
-///	}
-///}
-void Bitmap::CopyPixelsRot(const Bitmap* src, int tx, int ty)
+void Bitmap::CopyPixelsRot(const Bitmap* src, int tx, int ty, int edgePadSize)
 {
     int r = src->height - 1;
-    for (int y = 0; y < src->width; ++y)
-        for (int x = 0; x < src->height; ++x)
-            data[(ty + y) * width + (tx + x)] = src->data[(r - x) * src->width + y];
+	for (int y = -edgePadSize; y < src->width + edgePadSize; ++y)
+	{
+		for (int x = -edgePadSize; x < src->height + edgePadSize; ++x)
+		{
+			const int srcX = std::clamp(x, 0, src->width  - 1);
+			const int srcY = std::clamp(y, 0, src->height - 1);
+            data[(ty + y) * width + (tx + x)] = src->data[(r - srcX) * src->width + srcY];
+		}
+	}
 }
 
 bool Bitmap::Equals(const Bitmap* other) const

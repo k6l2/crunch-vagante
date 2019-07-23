@@ -52,10 +52,8 @@ struct Bitmap
     Bitmap(int width, int height);
     ~Bitmap();
     void SaveAs(const string& file);
-    void CopyPixels(const Bitmap* src, int tx, int ty);
-///	void copyPixelsFromSubregion(Bitmap const* src,
-///		int sourceOffsetX, int sourceOffsetY);
-    void CopyPixelsRot(const Bitmap* src, int tx, int ty);
+    void CopyPixels(const Bitmap* src, int tx, int ty, int edgePadSize);
+    void CopyPixelsRot(const Bitmap* src, int tx, int ty, int edgePadSize);
     bool Equals(const Bitmap* other) const;
 	void postLoadProcess(string const& fileName, bool premultiply, 
 		bool trim, uint32_t* pixels, int w, int h);

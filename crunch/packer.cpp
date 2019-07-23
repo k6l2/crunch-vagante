@@ -115,10 +115,15 @@ void Packer::SavePng(const string& file)
     {
         if (points[i].dupID < 0)
         {
+			//	@anti-texture-bleeding 
+			// Here, when copying pixels we tell the Bitmaps to duplicate all the
+			//	pixels along the edge so that we can fill the gutters between the
+			//	UV shells of each individual frame.
+			// See http://wiki.polycount.com/wiki/Edge_padding for more info on this issue
             if (points[i].rot)
-                bitmap.CopyPixelsRot(bitmaps[i], points[i].x, points[i].y);
+                bitmap.CopyPixelsRot(bitmaps[i], points[i].x, points[i].y, pad/2);
             else
-                bitmap.CopyPixels(bitmaps[i], points[i].x, points[i].y);
+                bitmap.CopyPixels   (bitmaps[i], points[i].x, points[i].y, pad/2);
         }
     }
     bitmap.SaveAs(file);
