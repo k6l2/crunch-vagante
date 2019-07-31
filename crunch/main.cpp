@@ -406,7 +406,7 @@ int main(int argc, const char* argv[])
     
     //Remove old files
 	const string processedGfxDir = outputDir + ".processed-gfx";
-	const bool debugProcessedGfx = true;
+	const bool debugProcessedGfx = false;
 	{
 ///		cout << "Recursively deleting old temp files from '" << processedGfxDir << "'...\n";
 ///		const uintmax_t numProcessedGfxDeleted = 
