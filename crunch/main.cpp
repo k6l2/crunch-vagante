@@ -406,7 +406,7 @@ int main(int argc, const char* argv[])
     
     //Remove old files
 	const string processedGfxDir = outputDir + ".processed-gfx";
-	const bool debugProcessedGfx = false;
+	const bool debugProcessedGfx = true;
 	{
 ///		cout << "Recursively deleting old temp files from '" << processedGfxDir << "'...\n";
 ///		const uintmax_t numProcessedGfxDeleted = 
@@ -695,6 +695,126 @@ int main(int argc, const char* argv[])
 							ss << palette.name << "/" << f << ".png";
 							bitmaps.back()->SaveAs(ss.str());
 						}
+					}
+				}
+			}
+		}
+		// Need to process VFonts slightly differently than normal flipbooks,
+		//	because their frame meta data is inconsistent between frames, and 
+		//	it's embedded in the image data. //
+		vector<Bitmap*> vFontBitmaps;
+		auto vFontArray = dGfxMeta["vfonts"].GetArray();
+		for (rapidjson::SizeType v = 0; v < vFontArray.Size(); v++)
+		{
+			auto const& vFont = vFontArray[v];
+			const string vFontFileNameAndGfxPathAndExt = vFont["filename"].GetString();
+			string vfFileDir, vfFileName;
+			SplitFileName(vFontFileNameAndGfxPathAndExt, &vfFileDir, &vfFileName, nullptr);
+			///			if (optVerbose)
+			///			{
+			///				cout << "processing flipbook '" << fbFileName << "'...\n";
+			///			}
+						///loadBitmap(fbFileDir, inputs[0] + "/" + fbFileNameAndGfxPathAndExt, flipbookBitmaps);
+			const string absoluteFileName = inputs[0] + "/" + vFontFileNameAndGfxPathAndExt;
+			if (debugProcessedGfx)
+			{
+				fs::create_directories(processedGfxDir + "/flipbooks/" + vfFileDir + vfFileName);
+			}
+			//	load the bitmap //
+			// specifically do NOT trim the flipbook sprite sheet when we load it in here!
+			//	we will do the trim step on each individual frame instead to save maximum space.
+			vFontBitmaps.push_back(new Bitmap(
+				absoluteFileName,
+				vfFileDir + GetFileName(absoluteFileName),
+				optPremultiply, false));
+			Bitmap*const bmpCurrVFont = vFontBitmaps.back();
+			//	process the character frame metadata & extract each character bitmap //
+			int currVFontCharacterIndex = 0;
+			// First, we need to find the uniform height of all characters in the VFont.
+			//	according to Vagante source, FVont characters all have the same height
+			//	(at least at the time that I'm writing this...) //
+			int firstMetaScanlineY = 0;
+			for (; firstMetaScanlineY < bmpCurrVFont->height; firstMetaScanlineY++)
+			{
+				const size_t i = firstMetaScanlineY * bmpCurrVFont->width + 0;
+				const uint32_t pixData = bmpCurrVFont->data[i];
+				// if the current pixel is solid RED //
+				if (pixData == 0xFF0000FF)
+				{
+					break;
+				}
+			}
+			int secondMetaScanlineY = firstMetaScanlineY + 1;
+			for (; secondMetaScanlineY < bmpCurrVFont->height; secondMetaScanlineY++)
+			{
+				const size_t i = secondMetaScanlineY * bmpCurrVFont->width + 0;
+				const uint32_t pixData = bmpCurrVFont->data[i];
+				// if the current pixel is solid RED //
+				if (pixData == 0xFF0000FF)
+				{
+					break;
+				}
+			}
+			const int vFontTextHeight = secondMetaScanlineY - firstMetaScanlineY - 1;
+			assert(vFontTextHeight > 0);
+			if (optVerbose)
+			{
+				cout << "vFont '" << vFontFileNameAndGfxPathAndExt << 
+					"' vFontTextHeight=" << vFontTextHeight<<"\n";
+			}
+			// for each scanline, we can check if it is a meta scanline by comparing the
+			//	left-most pixel to solid RED.
+			for (int y = 0; y < bmpCurrVFont->height; y++)
+			{
+				const size_t iFirstColumn = y * bmpCurrVFont->width + 0;
+				// if the current pixel is NOT solid RED, it's not a meta scanline //
+				if (bmpCurrVFont->data[iFirstColumn] != 0xFF0000FF)
+				{
+					continue;
+				}
+				// if we ARE a meta scanline, we can extract characters from the VFont //
+				int prevCharStartX = 0;
+				for (int x = 1; x < bmpCurrVFont->width; x++)
+				{
+					const size_t i = y * bmpCurrVFont->width + x;
+					// if the next pixel in the meta scanline is solid RED, 
+					//		(OR if it is solid BLUE)
+					//	we can extract this character! //
+					if (bmpCurrVFont->data[i] == 0xFF0000FF ||
+						bmpCurrVFont->data[i] == 0xFFFF0000)
+					{
+						const int characterWidth = x - prevCharStartX;
+						// Extract the next character in the VFont //
+						stringstream ssFrameName;
+						ssFrameName << vfFileDir << vfFileName << "/" << currVFontCharacterIndex;
+						if (optVerbose)
+						{
+							cout << "\t" << ssFrameName.str() << "\n";
+						}
+						frameBitmaps.push_back(new Bitmap(vFontBitmaps.back(),
+							prevCharStartX, y + 1, characterWidth, vFontTextHeight,
+							ssFrameName.str(),
+							// do not premultiply on the individual frames, since we already 
+							//	did that w/ the entire flipbook texture
+							false, optTrim));
+						prevCharStartX = x;
+						//	add each character to 'bitmaps' using an appropriate filename //
+						bitmaps.push_back(new Bitmap(*frameBitmaps.back()));
+						if (debugProcessedGfx)
+						{
+							//	debug save the character bitmaps into files //
+							stringstream ss;
+							ss << (processedGfxDir + "/flipbooks/" + vfFileDir + vfFileName + "/");
+							ss << currVFontCharacterIndex << ".png";
+							frameBitmaps.back()->SaveAs(ss.str());
+						}
+						currVFontCharacterIndex++;
+					}
+					// if the pixel in the meta scanline is solid BLUE,
+					//	we are done; we can move onto the next meta scanline... //
+					if (bmpCurrVFont->data[i] == 0xFFFF0000)
+					{
+						break;
 					}
 				}
 			}

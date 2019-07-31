@@ -42,6 +42,8 @@ struct Bitmap
     int frameY;
     int frameW;
     int frameH;
+	// each data element is arranged like this:
+	//	0xAABBGGRR
     uint32_t* data;
     size_t hashValue;
 	Bitmap(Bitmap const& other);
